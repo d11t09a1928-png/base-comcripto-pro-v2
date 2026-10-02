@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>base.comcripto PRO V2</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --bg:#020617;--card:#0f172a;--primary:#facc15;--green:#22c55e;--red:#ef4444;--text:#f1f5f9;--muted:#94a3b8;--border:#1e293b
+    }
+    *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+    body{background:var(--bg);color:var(--text);padding:14px}
+    .container{max-width:1100px;margin:0 auto}
+    header{display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border)}
+    .tab{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}.tab.active{background:var(--primary);color:#000}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin:12px 0}
+    .btn{width:100%;padding:13px;border:none;border-radius:12px;font-weight:900;cursor:pointer}.btn-buy{background:#22c55e;color:#000}.btn-sell{background:#ef4444;color:#fff}.btn-gold{background:#facc15;color:#000}
+    .input{width:100%;background:#020617;border:1px solid #334155;color:#fff;padding:11px;border-radius:10px;margin-top:6px}
+    .log{max-height:260px;overflow:auto;background:#020617;border:1px solid #1e293b;border-radius:10px;padding:8px}
+    canvas{width:100%!important;height:280px!important}
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <b style="color:#facc15">base.comcripto PRO V2</b>
+      <div style="font-size:.7rem;color:#94a3b8">SIMULADOR REALISTA • 1H + 4H + MEMORIA</div>
+    </div>
+    <div style="background:#facc15;color:#000;padding:4px 8px;border-radius:99px;font-weight:800;font-size:.65rem">1H • 4H • REAL</div>
+  </header>
+
+  <div class="card">
+    <h2>BTC/BRL <span id="priceLive" style="color:#22c55e">R$ 385.420,00</span></h2>
+    <div style="display:flex;gap:6px;margin:8px 0">
+      <button class="tab active" onclick="setTF('1H')">1H</button>
+      <button class="tab" onclick="setTF('4H')">4H</button>
+    </div>
+    <canvas id="chart"></canvas>
+    <div style="font-size:.75rem;color:#94a3b8;margin-top:8px">RSI 58.3 • EMA9 > EMA21 • Sup 61.800 / Res 65.200</div>
+  </div>
+
+  <div class="card">
+    <div>Saldo Banco: <b id="saldoBanco">R$ 5.000,00</b> | Corretora: <b id="bBRL">R$ 0,00</b> | BTC: <b id="bBTC">0.000000</b></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+      <input id="pixValor" class="input" type="number" value="1000">
+      <button class="btn btn-gold" onclick="pix()">PIX Banco → Corretora</button>
+      <input id="qtd" class="input" placeholder="Qtd BTC 0.001">
+      <input id="valorOrdem" class="input" placeholder="Valor BRL 1000">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <button class="btn btn-buy" onclick="comprar()">COMPRAR</button>
+      <button class="btn btn-sell" onclick="vender()">VENDER</button>
+    </div>
+    <div id="logCorretora" class="log" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Memoria de Negociacao - Diario</h2>
+    <input id="mEstr" class="input" placeholder="Estrategia: Suporte/Resistencia 4H">
+    <input id="mRR" class="input" value="1:2.1">
+    <input id="mNota" class="input" placeholder="O que viu no 1H/4H?">
+    <input id="mLicao" class="input" placeholder="Licao: Paciencia > Impulso">
+    <button class="btn btn-gold" style="margin-top:8px" onclick="salvarMemoria()">Salvar Memoria + Grafico 1H/4H</button>
+    <div id="listaMemorias" class="log" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+  let state = JSON.parse(localStorage.getItem('base_pro_v2') || 'null') || {
+    banco: 5000,
+    corretoraBRL: 0,
+    btc: 0,
+    preco: 385420,
+    trades: [],
+    memorias: []
+  };
+
+  let candles1H = [], candles4H = [], currentTF = '1H', chart;
+
+  function gen(n, base, vol){
+    let a = [], p = base;
+    for(let i = 0; i < n; i++){
+      let c = p + (Math.random() - 0.48) * vol;
+      a.push({ c });
+      p = c;
+    }
+    return a;
+  }
+
+  candles1H = gen(60, 380000, 1200);
+  candles4H = gen(60, 375000, 2800);
+
+  function draw(){
+    let ctx = document.getElementById('chart').getContext('2d');
+    let data = currentTF === '1H' ? candles1H : candles4H;
+    if(chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i),
+        datasets: [{ data: data.map(d => d.c), borderColor: '#facc15', tension: .3 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  function setTF(tf){ currentTF = tf; draw(); }
+  function fmt(v){ return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
+
+  function updateUI(){
+    document.getElementById('saldoBanco').innerText = fmt(state.banco);
+    document.getElementById('bBRL').innerText = fmt(state.corretoraBRL);
+    document.getElementById('bBTC').innerText = state.btc.toFixed(6);
+    document.getElementById('priceLive').innerText = fmt(state.preco);
+    document.getElementById('logCorretora').innerHTML = state.trades.slice(0,20).map(t =>
+      '<div style="font-size:.75rem;padding:4px;border-bottom:1px solid #1e293b">'+t.hora+' - '+t.txt+'</div>'
+    ).join('');
+    document.getElementById('listaMemorias').innerHTML = state.memorias.map(m =>
+      '<div style="font-size:.75rem;padding:6px;border-bottom:1px solid #1e293b"><b>'+m.estrategia+'</b> ('+m.tf+')<br>'+m.nota+'<br><span style="color:#facc15">Licao:'+m.licao+'</span></div>'
+    ).join('');
+  }
+
+  function now(){ return new Date().toLocaleTimeString('pt-BR'); }
+
+  function pix(){
+    let v = parseFloat(document.getElementById('pixValor').value);
+    if(v > state.banco) return alert('Saldo insuficiente');
+    state.banco -= v;
+    state.corretoraBRL += v;
+    state.trades.unshift({ hora: now(), txt: 'PIX ' + fmt(v) + ' Banco->Exchange' });
+    save();
+    updateUI();
+  }
+
+  function comprar(){
+    let q = parseFloat(document.getElementById('qtd').value) || 0;
+    let vBRL = parseFloat(document.getElementById('valorOrdem').value) || 0;
+    if(vBRL && !q) q = vBRL / state.preco;
+    if(!q) return alert('Informe qtd');
+    let custo = q * state.preco;
+    let taxa = custo * 0.002;
+    if(custo + taxa > state.corretoraBRL) return alert('Saldo BRL insuficiente');
+    state.corretoraBRL -= custo + taxa;
+    state.btc += q;
+    state.trades.unshift({ hora: now(), txt: 'COMPRA ' + q.toFixed(6) + ' BTC @ ' + fmt(state.preco) + ' TF ' + currentTF });
+    save();
+    updateUI();
+  }
+
+  function vender(){
+    let q = parseFloat(document.getElementById('qtd').value) || 0;
+    if(!q) q = state.btc;
+    if(q > state.btc) return alert('BTC insuficiente');
+    let rec = q * state.preco;
+    let taxa = rec * 0.002;
+    state.btc -= q;
+    state.corretoraBRL += rec - taxa;
+    state.trades.unshift({ hora: now(), txt: 'VENDA ' + q.toFixed(6) + ' BTC @ ' + fmt(state.preco) });
+    save();
+    updateUI();
+  }
+
+  function salvarMemoria(){
+    let mem = {
+      data: now(),
+      estrategia: document.getElementById('mEstr').value || 'Suporte/Resistencia',
+      rr: document.getElementById('mRR').value,
+      tf: currentTF,
+      nota: document.getElementById('mNota').value,
+      licao: document.getElementById('mLicao').value
+    };
+    if(!mem.nota) return alert('Escreva o que viu no 1H/4H');
+    state.memorias.unshift(mem);
+    state.trades.unshift({ hora: now(), txt: 'MEMORIA: ' + mem.estrategia + ' ' + mem.nota.slice(0, 60) });
+    save();
+    updateUI();
+    alert('Memoria salva!');
+  }
+
+  function save(){ localStorage.setItem('base_pro_v2', JSON.stringify(state)); }
+
+  function tick(){
+    state.preco += (Math.random() - 0.48) * (currentTF === '1H' ? 80 : 220);
+    if(chart){
+      let data = currentTF === '1H' ? candles1H : candles4H;
+      data[data.length - 1].c = state.preco;
+      chart.data.datasets[0].data = data.map(d => d.c);
+      chart.update('none');
+    }
+    updateUI();
+  }
+
+  setInterval(tick, 2000);
+  draw();
+  updateUI();
+</script>
+</body>
+</html>
